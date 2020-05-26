@@ -1,0 +1,35 @@
+/**
+ * Define New Tiara Instance
+ * @type {{init: tiaraInstance.init, trackPageView: tiaraInstance.trackPageView, trackClickEvent: tiaraInstance.trackClickEvent, setSectionPage: tiaraInstance.setSectionPage}}
+ */
+const tiaraInstance = {
+    init: function () {
+        const config = {
+            // local 테스트시 deployment: dev 적용
+            deployment: "production",
+            svcDomain: 'www.kakaocorp.com'
+        };
+
+        TiaraTracker.getInstance().init(config);
+    },
+    setSectionPage: function (sectionName, pageName) {
+        TiaraTracker.getInstance().setSection(sectionName).setPage(pageName);
+    },
+    trackPageView: function (pageName) {
+        TiaraTracker.getInstance().trackPage(pageName).track();
+    },
+    trackClickEvent: function (eventName, clickInfo) {
+        TiaraTracker.getInstance().trackEvent(eventName + '_Click').click(clickInfo).track();
+    }
+};
+
+/**
+ * New Tiara Tracking PageView
+ * @param sectionName
+ * @param pageName
+ */
+function pushNewTiara(sectionName, pageName) {
+    tiaraInstance.init();
+    tiaraInstance.setSectionPage(sectionName, pageName);
+    tiaraInstance.trackPageView(sectionName + '_' + pageName);
+}

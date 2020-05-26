@@ -1,0 +1,1326 @@
+// jquery kSlide
+(function($) {
+    'use strict';
+
+    function supportTransition() {
+        var div = document.createElement('div');
+        var transEndEventNames = {
+            "WebkitTransition": 'webkitTransitionEnd',
+            "MozTransition": 'transitionend',
+            "OTransition": 'oTransitionEnd otransitionend',
+            "transition": 'transitionend'
+        };
+        var result = false;
+
+        for (var name in transEndEventNames) {
+            if (div.style[name] !== undefined) {
+                result = true;
+            }
+        }
+        return result;
+    }
+
+    function supportTransform3d() {
+        if (!window.getComputedStyle) {
+            return false;
+        }
+        var el = document.createElement('div');
+        var has3d;
+        var transforms = {
+            'webkitTransform': '-webkit-transform',
+            'OTransform': '-o-transform',
+            'msTransform': '-ms-transform',
+            'MozTransform': '-moz-transform',
+            'transform': 'transform'
+        };
+        document.body.insertBefore(el, null);
+        for (var t in transforms) {
+            if (el.style[t] !== undefined) {
+                el.style[t] = "translate3d(1px,1px,1px)";
+                has3d = window.getComputedStyle(el).getPropertyValue(transforms[t]);
+            }
+        }
+        document.body.removeChild(el);
+        return (has3d !== undefined && has3d.length > 0 && has3d !== "none");
+    }
+
+    function getCssPrefix() {
+        if (!window.getComputedStyle) {
+            return false;
+        }
+        // create our test div element
+        var div = document.createElement('div'),
+            // css transition properties
+            props = ['WebkitPerspective', 'MozPerspective', 'OPerspective', 'msPerspective', 'perspective'];
+        // test for each property
+        for (var i = 0; i < props.length; i++) {
+            if (div.style[props[i]] !== undefined) {
+                var cssPrefix = props[i].replace('Perspective', '').toLowerCase();
+            }
+        }
+        if(cssPrefix === 'perspective') {
+            cssPrefix = '';
+        } else {
+            cssPrefix = '-' + cssPrefix + '-';
+        }
+        return cssPrefix;
+    }
+
+    $.fn.kSlide = function(options) {
+        var defaults = {
+            "images": [],
+            "altText": "",
+            "width": "100%",
+            "height": "100%",
+            "useTransition": false,
+            "useAnimation3D": false,
+            "useAutoChange": false,
+            "useResponsive": false, // 사용안함....
+            "useSnap": false, // 이미지가 1장일 경우 스냅효과 비활성화, TODO 2장 이상일 경우 각 선언부에서 활성화 해야함
+            "useTool": true,
+            "type": "default",
+            "isAccessibility": true,
+            "changedCallback": null,
+            "imgWidth": 0, // 이미지 사이즈만 따로 조정 (img tag 사용) defaults.width는 배경 (색이 들어감)
+            "imgHeight": 0, // 이미지 사이즈만 따로 조정 (img tag 사용) defaults.width는 배경 (색이 들어감)
+            "expandHeightRate": 0,
+            "reduceHeightRate": 0,
+            "minHeight": 0,
+            "maxHeight": 0,
+            "isSquare": false,
+            "device" : 'pc'
+        }
+
+        if(options.useTransition && supportTransition()) {
+            options.useTransition = options.useTransition;
+            options.useTransform3d = supportTransform3d() && options.useAnimation3D;
+        } else {
+            if(!supportTransition()) {
+                console.log('transition, snapEvent를 지원하지 않습니다. ie10이상 가능');
+            }
+            options.useTransition = false;
+            options.useTransform3d = false;
+        }
+
+        if(options.images.length < 2) {
+            options.useSnap = false;
+            options.autoChange = false;
+        }
+
+        var settings = $.extend({}, defaults, options);
+
+        return this.each(function() {
+            var self = this;
+            $(this).addClass(settings.type);
+            var $slideWrap = $('<div class="list_wrap"></div>');
+            var $slideBox = $('<ul class="list_slide" role="tablist" tabindex="0"></ul>');
+            var $controlBox = $(document.createDocumentFragment());
+            var $slideList = $slideBox.find('li');
+            var changeTimer = null;
+            var pageIndex = 1;
+            var isImgChanging = false;
+            if(settings.useSnap) {
+                var isMouseDown = false; // 마우스 다운
+                var isMouseMove = false; // 마우스 무브
+            }
+            var isBindingTransition = false;
+            $(self).css({
+                "width": settings.width,
+                "height": settings.height
+            });
+// render ----
+            // 전체 render
+            function render() {
+                renderImages();
+
+                if(settings.useTool){
+                    renderControls();
+                }
+                $slideWrap.append($slideBox);
+                $(self).append($slideWrap);
+                $(self).append($controlBox);
+                if(settings.changedCallback && typeof settings.changedCallback === 'function') {
+                    settings.changedCallback(self, 1);
+                }
+            }
+
+            // 이미지 render
+            function renderImages(direction) {
+                var len = 3,
+                    idx,
+                    pgIdx,
+                    domText,
+                    langTypeVal,
+                    $li,
+                    $thumbSlide,
+                    $imgThumb;
+
+                var $kakaoHead = $('#kakaoHead');
+                $kakaoHead.removeClass('change_color');
+
+                if(direction) {
+                    len = 1;
+                    if (direction === 'next') {
+                        pgIdx = pageIndex+1;
+                        if(pgIdx > settings.images.length) pgIdx = 1;
+                        idx = 1;
+                        $slideBox.find('li:eq(0)').remove();
+                    } else if (direction === 'prev') {
+                        pgIdx = pageIndex-1;
+                        if(pgIdx === 0) pgIdx = settings.images.length;
+                        idx = settings.images.length - 1;
+                        $slideBox.find('li:eq(2)').remove();
+                    }
+                }
+
+                for(var i = 0; i < len; i++) {
+                    if(typeof direction === 'undefined' ){
+                        idx = i ? i-1 : settings.images.length - 1;
+                        pgIdx = idx + 1;
+                    }
+                    $li = $('<li role="tab" tabindex="-1"></li>');
+                    if(settings.imgWidth || settings.imgHeight) {
+                      $thumbSlide = $('<div class="thumb_slide">' + (options.type == "fade" ? '<div class="info_page page_white"><strong class="inner_page_num">' + pgIdx + '</strong>' + ' / ' + settings.images.length + '</div>' : '') + '</div>');
+                        $imgThumb = $('<img class="img_thumb" src="'+ settings.images[idx] + '" alt="' + settings.altText + ' ">');
+                        if(settings.imgWidth || settings.imgHeight) {
+                            $imgThumb.css({ "width": settings.imgWidth, "height": settings.imgHeight, "padding": (settings.height - settings.imgHeight) / 2 });
+                        }
+                        $thumbSlide.append($imgThumb);
+                    } else {
+                        domText = '';
+                        if( options.type == "fade" && settings.images.length > 1) {
+                            if(settings.device == 'pc'){
+                              /* if(options.extraData.serviceImageType[i] == 'white' ) {
+                                   //alert("white");
+                                    domText += '<div class="info_page page_white"><strong class="inner_page_num">' + pgIdx + '</strong>' + ' / ' + settings.images.length + '</div>'
+                                }else if(options.extraData.serviceImageType[i] == 'black'){
+                                   //alert("black");
+                                    domText += '<div class="info_page page_black"><strong class="inner_page_num">' + pgIdx + '</strong>' + ' / ' + settings.images.length + '</div>'
+                                   }
+                                   else{*/
+                                   //alert("null");
+                                  domText += '<div class="info_page page_white"><strong class="inner_page_num">' + pgIdx + '</strong>' + ' / ' + settings.images.length + '</div>'
+                              // }
+                            }
+                        }
+                        if(options.extraData && self.id == "mainSlide") {
+                            langTypeVal = document.getElementById("langtypeval") ? document.getElementById("langtypeval").value : '';
+                            if(settings.device == 'pc'){
+                                if (options.extraData['bannerContents']) {
+                                    domText += '<p class="desc_g"> ' + options.extraData['bannerContents'][pgIdx - 1] + ' </p>';
+                                }
+                                if (options.extraData['bannerContents'] && options.extraData['bannerMoreOpts']) {
+                                    domText += '<a href="' + options.extraData['bannerLinks'][pgIdx - 1] + '" ' + (options.extraData['bannerMoreOpts'][pgIdx - 1] == 0 ? '' : 'target="_blank"') + ' class="btn_with btn_step">' + (langTypeVal == 'ko' ? '자세히 보기' : 'See More') + '<span class="ico_corp ico_arr"></span></a>';
+                                }
+                                domText = '<div class="inner_slide">' + domText + '</div>';
+                            } else {
+                                if (options.extraData['bannerContents']) {
+                                    domText += '<p class="desc_main"> ' + options.extraData['bannerContents'][pgIdx - 1] + ' </p>';
+                                }
+                                if (options.extraData['bannerContents'] && options.extraData['bannerMoreOpts']) {
+                                    domText += '<a href="' + options.extraData['bannerLinks'][pgIdx - 1] + '" ' + (options.extraData['bannerMoreOpts'][pgIdx - 1] == 0 ? '' : 'target="_blank"') + ' class="btn_detail">' + (langTypeVal == 'ko' ? '자세히 보기' : 'See More') + '<span class="ico_corp ico_arr"></span></a>';
+                                }
+
+                                domText = '<div class="inner_slide">' + domText + '</div>';
+                            }
+
+                        } else if (options.extraData && self.id == "serviceBannerSlide"){
+                            if(options.extraData['serviceBannerHeaderImages'].length > 0){
+                                var $textInfo = $('<div class="txt_info"></div>');
+                                var $image = $('<img src="'+ options.extraData['serviceBannerHeaderImages'][pgIdx - 1] +'" class="img_thumb" alt="">');
+                                $image.css("margin", 0);
+                                var $text = $(' <p class="desc_subtop"> ' + options.extraData['serviceBannerTitles'][pgIdx - 1] + ' </p>');
+                                $textInfo.append($image);
+                                $textInfo.append($text);
+                                domText += '<div class="inner_slide">' + $textInfo[0].outerHTML + '</div>';
+                            }
+                        }
+                        $thumbSlide = $('<div class="thumb_slide" style="background-image: url(' + settings.images[idx] + ')">' + domText + '</div>');
+                    }
+
+                    $li.append($thumbSlide);
+                    if(typeof direction === 'undefined' || direction === 'next'){
+                        if(i === 1) {
+                            $li.addClass('on');
+                        }
+                        $slideBox.append($li);
+                    }else if(direction === 'prev') {
+                        $slideBox.prepend($li);
+                    }
+
+                }
+            }
+
+            // tool render
+            function renderControls() {
+
+                if(settings.images.length > 1){
+                    var $prevBtn = $('<button class="btn_page btn_prev"><span class="ico_corp ico_prev">이전</span></button>');
+                    var $nextBtn = $('<button class="btn_page btn_next"><span class="ico_corp ico_next">다음</span></button>');
+                    $controlBox.append($prevBtn);
+                    $controlBox.append($nextBtn);
+
+                    // 1장일 경우 페이지인덱스 표시하지 않음
+                    var $pageNumber = $('<div class="info_page page_white" ' + (options.type === "fade" ? 'style="opacity:0"' : '') + '><span class="screen_out">현재 페이지</span><strong class="num_page">' + pageIndex + '</strong> / ' + settings.images.length + '</div>');
+                    $controlBox.append($pageNumber);
+                }
+            }
+
+            // 애니메이션 끝나고 다시 그림
+            function reRender(direction) {
+                if(direction === 'prev') {
+                    var temp = settings.images[settings.images.length - 1];
+                    settings.images.splice(settings.images.length - 1, 1);
+                    settings.images.unshift(temp);
+                    pageIndex = pageIndex === 1 ? settings.images.length : pageIndex - 1;
+                } else if(direction === 'next') {
+                    var temp = settings.images[0];
+                    settings.images.splice(0, 1);
+                    settings.images.push(temp);
+                    pageIndex = pageIndex === settings.images.length ? 1 : pageIndex + 1;
+                }
+
+                renderImages(direction);
+                $(self).find('.num_page').html(pageIndex);
+
+                if(settings.changedCallback && typeof settings.changedCallback === 'function') {
+                    settings.changedCallback(self, pageIndex);
+                }
+
+                if(settings.type === 'slide') {
+                    changeSlide();
+                }
+
+                if(settings.images.length > 1 && settings.useAutoChange) {
+                    autoChange();
+                }
+
+                if(settings.useSnap) {
+                    isMouseDown = false;
+                    isMouseMove = false;
+                }
+            }
+// -----
+
+// event ------
+
+            // settings.useTransition === true 일때 사용가능 (애니메이션 끝나고 실행)
+            function bindTransitionEnd($this, direction) {
+                isBindingTransition = true;
+                if(settings.type === 'slide') {
+                    $slideBox.css(cssPrefix + 'transition', cssPrefix + 'transform .2s');
+                }
+                $this.off('transitionend webkitTransitionEnd oTransitionEnd MSTransitionEnd');
+                $this.on('transitionend webkitTransitionEnd oTransitionEnd MSTransitionEnd', function() {
+                    if(settings.type === 'slide') {
+                        var childrenWidth = 100 / 3;
+                        $slideBox.css(cssPrefix + 'transition', '');
+                        $slideBox.css(cssPrefix + 'transform', settings.useTransform3d ? 'translate3d(-' + childrenWidth + '%, 0, 0)' : 'translate(-' + childrenWidth + '%, 0)');
+                        bindAnimateEnd(direction);
+                    } else if(settings.type === 'fade') {
+                        if($this.hasClass('on')) {
+                            bindAnimateEnd(direction);
+                        }
+                    }
+                    isBindingTransition = false;
+                });
+            }
+
+            // settings.useTransition === false 일때 사용가능 (애니메이션 끝나고 실행)
+            function bindAnimateStart($this, css) {
+                var defer = $.Deferred();
+                $this.animate(css, 500, function() {
+                    defer.resolve();
+                });
+                return defer.promise();
+            }
+
+            // 애니메이션 끝나고 실행 후 마무리 함수
+            function bindAnimateEnd(direction) {
+                reRender(direction);
+                if(settings.type === 'fade') {
+                    abledBtns();
+                }
+            }
+
+            // 이벤트들
+            function bindEvents() {
+                var $el = $(self);
+                $el.find('.btn_prev').on('click', function(e) {
+                    e.preventDefault();
+                    if(!isImgChanging) {
+                        clickedDirection('prev');
+                    }
+                });
+
+                $el.find('.btn_next').on('click', function(e) {
+                    e.preventDefault();
+                    if(!isImgChanging) {
+                        clickedDirection('next');
+                    }
+                });
+
+                if(isResponsive()) {
+                    $(window).on('orientationchange resize', function(){
+                        onResize();
+                    });
+                }
+
+                if(settings.isAccessibility && settings.useAutoChange) {
+                    $(self).on('focus', 'a', clearTimer);
+                    $(self).on('focus', 'button', clearTimer);
+                    $(self).on('focus', 'ul', clearTimer);
+                }
+
+                if(settings.useSnap) {
+                    onSnap();
+                }
+            }
+
+            function onResize(callback) {
+                getHeight(function(height) {
+                    var elHeight = (settings.imgHeight ? window.innerWidth : height);
+                    if(settings.maxHeight && settings.minHeight) {
+                        elHeight = window.innerWidth * (settings.maxHeight / 1920);
+                        if(elHeight >= settings.maxHeight) {
+                            elHeight = settings.maxHeight;
+                        } else if(elHeight <= settings.minHeight) {
+                            elHeight = settings.minHeight;
+                        }
+                        $slideBox.css("height", elHeight + 'px');
+                    }
+                    if(settings.isSquare) {
+                        elHeight = $(self).outerWidth();
+                    }
+                    $(self).css({
+                        "height": elHeight + 'px'
+                    });
+                    if(callback && typeof callback === 'function') {
+                        callback();
+                    }
+                }, true);
+            }
+
+            function onSnap() {
+                var $el = $(self);
+                var defaultX, defaultY, speedX, positionMovedX, offsetMovedX, offsetMovedY, currentX;
+                // 마우스다운시 위치값, 마우스무브시 이동 슬라이드 가로 비례값, 마우스무브시 이동값, 현재 transformX 값
+                var slideWidth = settings.useTransition ? 100 / 3 : 100;
+
+                $el.on('mousedown touchstart', function(e) {
+                    if(!isBindingTransition) {
+                        isMouseDown = true;
+                        defaultX = e.clientX || e.originalEvent.touches[0].clientX;
+                        defaultY = e.clientY || e.originalEvent.touches[0].clientY;
+                    }
+                });
+
+                $el.on('mousemove touchmove', function(e) {
+                    try {
+                        if(!(Math.abs(defaultY - (e.clientY || e.originalEvent.touches[0].clientY)) >= Math.abs(defaultX - (e.clientX || e.originalEvent.touches[0].clientX)))) {
+                            e.preventDefault();
+                        }
+                    } catch (e) {
+                        console.log(e)
+                    }
+
+                    if(isMouseDown) {
+                        isMouseMove = true;
+                        speedX = slideWidth / $(this).width();
+                        offsetMovedX = e.clientX || e.originalEvent.touches[0].clientX;
+                        offsetMovedY = e.clientY || e.originalEvent.touches[0].clientY;
+                        positionMovedX = (offsetMovedX - defaultX) * speedX;
+                        currentX = slideWidth - positionMovedX;
+                        if(settings.type === 'slide' && (defaultY < offsetMovedY + 20 && defaultY > offsetMovedY - 20)) {
+                            if(settings.useTransition) {
+                                $slideBox.css(cssPrefix + 'transform', settings.useTransform3d ? 'translate3d(-' + currentX + '%, 0, 0)' : 'translate(-' + currentX + '%, 0)');
+                            } else {
+                                $slideBox.css('left', '-' + currentX + '%');
+                            }
+                        }
+                    }
+                });
+
+                $el.on('mouseleave mouseup touchend', function(e) {
+                    if(isMouseDown && isMouseMove) {
+                        if(slideWidth > currentX + 5) {
+                            clickedDirection('prev');
+                        } else if(slideWidth < currentX - 5) {
+                            clickedDirection('next');
+                        } else {
+                            if(settings.type === 'slide') {
+                                clickedDirection();
+                            } else {
+                                isMouseDown = false;
+                            }
+                        }
+                    } else {
+                        isMouseDown = false;
+                    }
+                });
+            }
+
+            function clickedDirection(direction) {
+                if(settings.useSnap) {
+                    isMouseDown = false;
+                    isMouseMove = false;
+                }
+                if(settings.useAutoChange) {
+                    clearTimer();
+                }
+                if(settings.type === 'slide') {
+                    changeSlide(direction);
+                } else if(settings.type === 'fade') {
+                    disabledBtns();
+                    changeFade(direction);
+                } else {
+                    changeDefault(direction);
+                }
+            }
+
+            function disabledBtns() {
+                isImgChanging = true;
+                $(self).find('.btn_page').addClass('has_disabled');
+            }
+
+            function abledBtns() {
+                isImgChanging = false;
+                $(self).find('.btn_page').removeClass('has_disabled');
+            }
+
+            function clearTimer() {
+                clearTimeout(changeTimer);
+                changeTimer = null;
+            }
+// -------
+
+            function autoChange() {
+                changeTimer = setTimeout(function() {
+                    if(settings.type === 'slide') {
+                        changeSlide('next');
+                    } else if(settings.type === 'fade') {
+                        changeFade('next');
+                        disabledBtns();
+                    } else {
+                        changeDefault('next');
+                    }
+                }, settings.showDuration * 1000);
+            }
+
+            // default 실행
+            function changeDefault(direction) {
+                var isChange = false; // each문 현재 on된 것만 실행 하기 위해 만든 boolean 값
+                $slideBox.find('li').each(function() {
+                    var $this = $(this);
+                    var $current = $(self).find('.on').find('.thumb_slide');
+                    if(!isAriaHidden()) {
+                        $this.attr('aria-hidden', 'true');
+                    }
+                    var $next = $this.next();
+                    if(direction === 'prev') {
+                        $next = $this.prev();
+                    }
+                    if($this.hasClass('on') && !isChange) {
+                        $this.removeClass('on');
+                        $next.addClass('on');
+                        if(!isAriaHidden()) {
+                            $next.attr('aria-hidden', 'false');
+                        }
+                        isChange = true;
+                        bindAnimateEnd(direction);
+                    }
+                });
+            }
+            function fadeForMainSlide($next){
+                /* 2017-10-09 jake start */
+
+                var $kakaoHead = $('#kakaoHead');
+                var type = options.extraData['bannerTypes'][($next.find('.inner_page_num').text()*1-1)];
+                var buttonType = options.extraData['bannerButtonClassCode'][($next.find('.inner_page_num').text()*1-1)];
+                if($kakaoHead.hasClass('head_type2')){
+                    $kakaoHead.removeClass('head_type1');
+                    $kakaoHead.removeClass('head_type3');
+                    if(type != 'white'){
+                        $next.addClass('white_slide');
+                    }
+                }else if(options.extraData) {
+                    if(settings.device == 'pc'){
+                        $kakaoHead.removeClass('change_color');
+                        if(type == 'white') {
+                            $kakaoHead.removeClass('head_type3');
+                            $kakaoHead.addClass('head_type1');
+                            $next.removeClass('white_slide');
+                            $kakaoHead.addClass('change_color');
+                            $next.find('div.info_page').addClass('page_white');
+                        } else {
+                            if($kakaoHead.hasClass('head_type1')){
+                                $kakaoHead.addClass('change_color');
+                            }
+                            $kakaoHead.removeClass('head_type1');
+                            $kakaoHead.addClass('head_type3');
+                            $next.addClass('white_slide');
+                            $next.find('div.info_page').removeClass('page_white');
+                        }
+                    } else {
+                        if(type == 'white'){
+                            $kakaoHead.removeClass('head_type1');
+                            $kakaoHead.addClass('head_type2');
+                        } else {
+                            $kakaoHead.removeClass('head_type2');
+                            $kakaoHead.addClass('head_type1');
+                        }
+                    }
+
+
+
+                    if(settings.device == 'pc'){
+                        if(buttonType == 'btn0'){
+                            $next.find('a.btn_with').hide();
+
+                        } else if (buttonType == 'btn1'){
+                            $next.find('a.btn_with').show();
+                            $next.find('a.btn_with').addClass('btn_stroke');
+                        } else if (buttonType == 'btn2'){
+                            $next.find('a.btn_with').show();
+                        }
+                    } else {
+                        if(buttonType == 'btn0'){
+                            $next.find('a.btn_detail').hide();
+                            if(settings.images.length > 1){
+                                $next.find('p.desc_main').addClass('desc_type');
+                            } else {
+                                $next.find('p.desc_main').removeClass('desc_type');
+                            }
+                        } else if (buttonType == 'btn1'){
+                            $next.find('a.btn_detail').show();
+                            $next.find('p.desc_main').removeClass('desc_type');
+                        } else if (buttonType == 'btn2'){
+                            $next.find('a.btn_detail').show();
+                            $next.find('p.desc_main').removeClass('desc_type');
+                        }
+                    }
+                }
+                /* 2017-10-09 jake end */
+            }
+            // fade in out 실행
+            function changeFade(direction) {
+                var isChange = false; // each문 현재 on된 것만 실행 하기 위해 만든 boolean 값
+                $slideBox.find('li').each(function() {
+                    var $this = $(this);
+                    if(!isAriaHidden()) {
+                        $this.attr('aria-hidden', 'false');
+                    }
+                    var $next = $this.next();
+                    if(direction === 'prev') {
+                        $next = $this.prev();
+                    }
+                    if($this.hasClass('on') && !isChange) {
+                        if(settings.useTransition) {
+                            if(self.id == 'mainSlide') {
+                                fadeForMainSlide($next);
+                            }else if(self.id == 'serviceImageSlide' || self.id == 'serviceBannerSlide'){
+                                var type = options.extraData['serviceImageType'][($next.find('.inner_page_num').text()*1-1)];
+                                if(type == 'black'){
+                                    $next.find('.info_page').removeClass('page_white');
+                                    $next.find('.info_page').addClass('page_black');
+                                } else if(type == 'white'){
+                                    $next.find('.info_page').removeClass('page_black');
+                                    $next.find('.info_page').addClass('page_white');
+                                }
+                                else {
+                                    $next.find('.info_page').addClass('page_white');
+                                }
+                            }
+                            bindTransitionEnd($this, direction);
+                            bindTransitionEnd($next, direction);
+                            $this.removeClass('on');
+                            $next.addClass('on');
+                            if(!isAriaHidden()) {
+                                $this.attr('aria-hidden', 'true');
+                            }
+                            isChange = true;
+                        } else {
+                            $.when(bindAnimateStart($this, {"opacity": 0}), bindAnimateStart($next, {"opacity": 1}))
+                                .done(function() {
+                                    $this.removeClass('on');
+                                    $next.addClass('on');
+                                    isChange = true;
+                                    setTimeout(function() {
+                                        bindAnimateEnd(direction);
+                                    }, 100);
+                                });
+                        }
+                    }
+                });
+            }
+
+            // slide 넘김 실행
+            function changeSlide(direction, isNotBind) {
+                var childrenWidth = 100 / 3 + 0.0001;
+                var currentDirectionValue = childrenWidth;
+                var directionValue = 0;
+                if(direction === 'prev') {
+                    directionValue = -childrenWidth;
+                } else if(direction === 'next') {
+                    directionValue = childrenWidth;
+                }
+                currentDirectionValue = currentDirectionValue + directionValue;
+                if(settings.useTransition) {
+                    $slideBox.css(cssPrefix + 'transform', settings.useTransform3d ? 'translate3d(-' + currentDirectionValue + '%, 0, 0)' : 'translate(-' + currentDirectionValue + '%, 0)');
+                } else {
+                    if(direction) {
+                        $.when(bindAnimateStart($slideBox, {"left": (currentDirectionValue ? "-200%" : 0)}))
+                            .done(function() {
+                                $slideBox.css("left", "-100%");
+                                bindAnimateEnd(direction);
+                            });
+                    } else {
+                        // setting.useTransition === false 일때 최초실행
+                        $slideBox.css("left", '-100%');
+                    }
+                }
+                // slide li 값 셋팅
+                $slideBox.find('li').each(function(index) {
+                    var $this = $(this);
+                    if(!isAriaHidden()) {
+                        $this.attr('aria-hidden', 'true');
+                    }
+                    $this.css('width', childrenWidth + '%');
+                    if(index === 1 && !isAriaHidden()) {
+                        $this.attr('aria-hidden', 'false');
+                    }
+                });
+                // setting.useTransition === true 일때 최초실행만 동작하지 않도록...
+                if(!isNotBind && settings.useTransition && direction) {
+                    bindTransitionEnd($slideBox, direction);
+                }
+            }
+
+            function getHeight(callback, isLoad) {
+                var $img = $('<img src="' + settings.images[0] + '" />');
+                if(!(callback && typeof callback === 'function')) {
+                    return;
+                }
+                $img.load(function() {
+                    callback(getTestImgHeight($img));
+                });
+                return;
+            }
+
+            function getTestImgHeight($img) {
+                var height = 0;
+                if(!(settings.expandHeightRate || settings.reduceHeightRate)){
+                    $img.css({
+                        "position": "absoulte",
+                        "width": "100%",
+                        "visibility": "hidden"
+                    });
+                    $(self).append($img);
+                    height = $img.outerHeight();
+                    $img.remove();
+                } else {
+                    height = window.innerWidth;
+                    if(settings.expandHeightRate) {
+                        height = height * settings.expandHeightRate;
+                    } else if(settings.reduceHeightRate) {
+                        height = height * settings.reduceHeightRate;
+                    }
+                }
+                if(settings.isSquare) {
+                    height = $(self).outerWidth();
+                }
+                return height;
+            }
+
+            function isResponsive() {
+                return settings.height === '100%' || (settings.height === '100%' && settings.imgHeight);
+            }
+
+            function isAriaHidden() {
+                return !!$(self).attr('aria-hidden')
+            }
+
+            if(isResponsive()) {
+                onResize(function() {
+                    start();
+                });
+            } else {
+                start();
+            }
+
+            var cssPrefix;
+            function start() {
+                render();
+                bindEvents();
+
+                if(settings.type === 'slide') {
+                    cssPrefix = getCssPrefix();
+                    changeSlide('', true);
+                }
+
+                if(settings.images.length > 1 && settings.useAutoChange) {
+                    autoChange();
+                }
+            }
+
+        });
+    }
+})(jQuery);
+
+// jquery.mask.js
+(function (factory, jQuery, Zepto) {
+
+    if (typeof define === 'function' && define.amd) {
+        define(['jquery'], factory);
+    } else if (typeof exports === 'object') {
+        module.exports = factory(require('jquery'));
+    } else {
+        factory(jQuery || Zepto);
+    }
+
+}(function ($) {
+
+    var Mask = function (el, mask, options) {
+
+        var p = {
+            invalid: [],
+            getCaret: function () {
+                try {
+                    var sel,
+                        pos = 0,
+                        ctrl = el.get(0),
+                        dSel = document.selection,
+                        cSelStart = ctrl.selectionStart;
+
+                    // IE Support
+                    if (dSel && navigator.appVersion.indexOf('MSIE 10') === -1) {
+                        sel = dSel.createRange();
+                        sel.moveStart('character', -p.val().length);
+                        pos = sel.text.length;
+                    }
+                    // Firefox support
+                    else if (cSelStart || cSelStart === '0') {
+                        pos = cSelStart;
+                    }
+
+                    return pos;
+                } catch (e) {}
+            },
+            setCaret: function(pos) {
+                try {
+                    if (el.is(':focus')) {
+                        var range, ctrl = el.get(0);
+
+                        // Firefox, WebKit, etc..
+                        if (ctrl.setSelectionRange) {
+                            ctrl.setSelectionRange(pos, pos);
+                        } else { // IE
+                            range = ctrl.createTextRange();
+                            range.collapse(true);
+                            range.moveEnd('character', pos);
+                            range.moveStart('character', pos);
+                            range.select();
+                        }
+                    }
+                } catch (e) {}
+            },
+            events: function() {
+                el
+                    .on('keydown.mask', function(e) {
+                        el.data('mask-keycode', e.keyCode || e.which);
+                        el.data('mask-previus-value', el.val());
+                        el.data('mask-previus-caret-pos', p.getCaret());
+                        p.maskDigitPosMapOld = p.maskDigitPosMap;
+                    })
+                    .on($.jMaskGlobals.useInput ? 'input.mask' : 'keyup.mask', p.behaviour)
+                    .on('paste.mask drop.mask', function() {
+                        setTimeout(function() {
+                            el.keydown().keyup();
+                        }, 100);
+                    })
+                    .on('change.mask', function(){
+                        el.data('changed', true);
+                    })
+                    .on('blur.mask', function(){
+                        if (oldValue !== p.val() && !el.data('changed')) {
+                            el.trigger('change');
+                        }
+                        el.data('changed', false);
+                    })
+                    // it's very important that this callback remains in this position
+                    // otherwhise oldValue it's going to work buggy
+                    .on('blur.mask', function() {
+                        oldValue = p.val();
+                    })
+                    // select all text on focus
+                    .on('focus.mask', function (e) {
+                        if (options.selectOnFocus === true) {
+                            $(e.target).select();
+                        }
+                    })
+                    // clear the value if it not complete the mask
+                    .on('focusout.mask', function() {
+                        if (options.clearIfNotMatch && !regexMask.test(p.val())) {
+                            p.val('');
+                        }
+                    });
+            },
+            getRegexMask: function() {
+                var maskChunks = [], translation, pattern, optional, recursive, oRecursive, r;
+
+                for (var i = 0; i < mask.length; i++) {
+                    translation = jMask.translation[mask.charAt(i)];
+
+                    if (translation) {
+
+                        pattern = translation.pattern.toString().replace(/.{1}$|^.{1}/g, '');
+                        optional = translation.optional;
+                        recursive = translation.recursive;
+
+                        if (recursive) {
+                            maskChunks.push(mask.charAt(i));
+                            oRecursive = {digit: mask.charAt(i), pattern: pattern};
+                        } else {
+                            maskChunks.push(!optional && !recursive ? pattern : (pattern + '?'));
+                        }
+
+                    } else {
+                        maskChunks.push(mask.charAt(i).replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+                    }
+                }
+
+                r = maskChunks.join('');
+
+                if (oRecursive) {
+                    r = r.replace(new RegExp('(' + oRecursive.digit + '(.*' + oRecursive.digit + ')?)'), '($1)?')
+                        .replace(new RegExp(oRecursive.digit, 'g'), oRecursive.pattern);
+                }
+
+                return new RegExp(r);
+            },
+            destroyEvents: function() {
+                el.off(['input', 'keydown', 'keyup', 'paste', 'drop', 'blur', 'focusout', ''].join('.mask '));
+            },
+            val: function(v) {
+                var isInput = el.is('input'),
+                    method = isInput ? 'val' : 'text',
+                    r;
+
+                if (arguments.length > 0) {
+                    if (el[method]() !== v) {
+                        el[method](v);
+                    }
+                    r = el;
+                } else {
+                    r = el[method]();
+                }
+
+                return r;
+            },
+            calculateCaretPosition: function() {
+                var oldVal = el.data('mask-previus-value') || '',
+                    newVal = p.getMasked(),
+                    caretPosNew = p.getCaret();
+                if (oldVal !== newVal) {
+                    var caretPosOld = el.data('mask-previus-caret-pos') || 0,
+                        newValL = newVal.length,
+                        oldValL = oldVal.length,
+                        maskDigitsBeforeCaret = 0,
+                        maskDigitsAfterCaret = 0,
+                        maskDigitsBeforeCaretAll = 0,
+                        maskDigitsBeforeCaretAllOld = 0,
+                        i = 0;
+
+                    for (i = caretPosNew; i < newValL; i++) {
+                        if (!p.maskDigitPosMap[i]) {
+                            break;
+                        }
+                        maskDigitsAfterCaret++;
+                    }
+
+                    for (i = caretPosNew - 1; i >= 0; i--) {
+                        if (!p.maskDigitPosMap[i]) {
+                            break;
+                        }
+                        maskDigitsBeforeCaret++;
+                    }
+
+                    for (i = caretPosNew - 1; i >= 0; i--) {
+                        if (p.maskDigitPosMap[i]) {
+                            maskDigitsBeforeCaretAll++;
+                        }
+                    }
+
+                    for (i = caretPosOld - 1; i >= 0; i--) {
+                        if (p.maskDigitPosMapOld[i]) {
+                            maskDigitsBeforeCaretAllOld++;
+                        }
+                    }
+
+                    if (caretPosNew > oldValL) {
+                        // if the cursor is at the end keep it there
+                        caretPosNew = newValL;
+                    }
+                    else if (caretPosOld >= caretPosNew && caretPosOld !== oldValL) {
+                        if (!p.maskDigitPosMapOld[caretPosNew])  {
+                            var caretPos = caretPosNew;
+                            caretPosNew -= maskDigitsBeforeCaretAllOld - maskDigitsBeforeCaretAll;
+                            caretPosNew -= maskDigitsBeforeCaret;
+                            if (p.maskDigitPosMap[caretPosNew])  {
+                                caretPosNew = caretPos;
+                            }
+                        }
+                    }
+                    // else if (caretPosNew > caretPosOld) {
+                    //     caretPosNew += maskDigitsBeforeCaretAll - maskDigitsBeforeCaretAllOld;
+                    //     caretPosNew += maskDigitsAfterCaret;
+                    // }
+                }
+                return caretPosNew;
+            },
+            behaviour: function(e) {
+                e = e || window.event;
+                p.invalid = [];
+
+                var keyCode = el.data('mask-keycode');
+
+                if ($.inArray(keyCode, jMask.byPassKeys) === -1) {
+                    var newVal   = p.getMasked(),
+                        caretPos = p.getCaret();
+
+                    setTimeout(function() {
+                        p.setCaret(p.calculateCaretPosition());
+                    }, 10);
+
+                    p.val(newVal);
+                    p.setCaret(caretPos);
+                    return p.callbacks(e);
+                }
+            },
+            getMasked: function(skipMaskChars, val) {
+                var buf = [],
+                    value = val === undefined ? p.val() : val + '',
+                    m = 0, maskLen = mask.length,
+                    v = 0, valLen = value.length,
+                    offset = 1, addMethod = 'push',
+                    resetPos = -1,
+                    maskDigitCount = 0,
+                    maskDigitPosArr = [],
+                    lastMaskChar,
+                    check;
+
+                if (options.reverse) {
+                    addMethod = 'unshift';
+                    offset = -1;
+                    lastMaskChar = 0;
+                    m = maskLen - 1;
+                    v = valLen - 1;
+                    check = function () {
+                        return m > -1 && v > -1;
+                    };
+                } else {
+                    lastMaskChar = maskLen - 1;
+                    check = function () {
+                        return m < maskLen && v < valLen;
+                    };
+                }
+
+                var lastUntranslatedMaskChar;
+                while (check()) {
+                    var maskDigit = mask.charAt(m),
+                        valDigit = value.charAt(v),
+                        translation = jMask.translation[maskDigit];
+
+                    if (translation) {
+                        if (valDigit.match(translation.pattern)) {
+                            buf[addMethod](valDigit);
+                            if (translation.recursive) {
+                                if (resetPos === -1) {
+                                    resetPos = m;
+                                } else if (m === lastMaskChar) {
+                                    m = resetPos - offset;
+                                }
+
+                                if (lastMaskChar === resetPos) {
+                                    m -= offset;
+                                }
+                            }
+                            m += offset;
+                        } else if (valDigit === lastUntranslatedMaskChar) {
+                            // matched the last untranslated (raw) mask character that we encountered
+                            // likely an insert offset the mask character from the last entry; fall
+                            // through and only increment v
+                            maskDigitCount--;
+                            lastUntranslatedMaskChar = undefined;
+                        } else if (translation.optional) {
+                            m += offset;
+                            v -= offset;
+                        } else if (translation.fallback) {
+                            buf[addMethod](translation.fallback);
+                            m += offset;
+                            v -= offset;
+                        } else {
+                            p.invalid.push({p: v, v: valDigit, e: translation.pattern});
+                        }
+                        v += offset;
+                    } else {
+                        if (!skipMaskChars) {
+                            buf[addMethod](maskDigit);
+                        }
+
+                        if (valDigit === maskDigit) {
+                            maskDigitPosArr.push(v);
+                            v += offset;
+                        } else {
+                            lastUntranslatedMaskChar = maskDigit;
+                            maskDigitPosArr.push(v + maskDigitCount);
+                            maskDigitCount++;
+                        }
+
+                        m += offset;
+                    }
+                }
+
+                var lastMaskCharDigit = mask.charAt(lastMaskChar);
+                if (maskLen === valLen + 1 && !jMask.translation[lastMaskCharDigit]) {
+                    buf.push(lastMaskCharDigit);
+                }
+
+                var newVal = buf.join('');
+                p.mapMaskdigitPositions(newVal, maskDigitPosArr, valLen);
+                return newVal;
+            },
+            mapMaskdigitPositions: function(newVal, maskDigitPosArr, valLen) {
+                var maskDiff = options.reverse ? newVal.length - valLen : 0;
+                p.maskDigitPosMap = {};
+                for (var i = 0; i < maskDigitPosArr.length; i++) {
+                    p.maskDigitPosMap[maskDigitPosArr[i] + maskDiff] = 1;
+                }
+            },
+            callbacks: function (e) {
+                var val = p.val(),
+                    changed = val !== oldValue,
+                    defaultArgs = [val, e, el, options],
+                    callback = function(name, criteria, args) {
+                        if (typeof options[name] === 'function' && criteria) {
+                            options[name].apply(this, args);
+                        }
+                    };
+
+                callback('onChange', changed === true, defaultArgs);
+                callback('onKeyPress', changed === true, defaultArgs);
+                callback('onComplete', val.length === mask.length, defaultArgs);
+                callback('onInvalid', p.invalid.length > 0, [val, e, el, p.invalid, options]);
+            }
+        };
+
+        el = $(el);
+        var jMask = this, oldValue = p.val(), regexMask;
+
+        mask = typeof mask === 'function' ? mask(p.val(), undefined, el,  options) : mask;
+
+        // public methods
+        jMask.mask = mask;
+        jMask.options = options;
+        jMask.remove = function() {
+            var caret = p.getCaret();
+            p.destroyEvents();
+            p.val(jMask.getCleanVal());
+            p.setCaret(caret);
+            return el;
+        };
+
+        // get value without mask
+        jMask.getCleanVal = function() {
+            return p.getMasked(true);
+        };
+
+        // get masked value without the value being in the input or element
+        jMask.getMaskedVal = function(val) {
+            return p.getMasked(false, val);
+        };
+
+        jMask.init = function(onlyMask) {
+            onlyMask = onlyMask || false;
+            options = options || {};
+
+            jMask.clearIfNotMatch  = $.jMaskGlobals.clearIfNotMatch;
+            jMask.byPassKeys       = $.jMaskGlobals.byPassKeys;
+            jMask.translation      = $.extend({}, $.jMaskGlobals.translation, options.translation);
+
+            jMask = $.extend(true, {}, jMask, options);
+
+            regexMask = p.getRegexMask();
+
+            if (onlyMask) {
+                p.events();
+                p.val(p.getMasked());
+            } else {
+                if (options.placeholder) {
+                    el.attr('placeholder' , options.placeholder);
+                }
+
+                // this is necessary, otherwise if the user submit the form
+                // and then press the "back" button, the autocomplete will erase
+                // the data. Works fine on IE9+, FF, Opera, Safari.
+                if (el.data('mask')) {
+                    el.attr('autocomplete', 'off');
+                }
+
+                // detect if is necessary let the user type freely.
+                // for is a lot faster than forEach.
+                for (var i = 0, maxlength = true; i < mask.length; i++) {
+                    var translation = jMask.translation[mask.charAt(i)];
+                    if (translation && translation.recursive) {
+                        maxlength = false;
+                        break;
+                    }
+                }
+
+                if (maxlength) {
+                    el.attr('maxlength', mask.length);
+                }
+
+                p.destroyEvents();
+                p.events();
+
+                var caret = p.getCaret();
+                p.val(p.getMasked());
+                p.setCaret(caret);
+            }
+        };
+
+        jMask.init(!el.is('input'));
+    };
+
+    $.maskWatchers = {};
+    var HTMLAttributes = function () {
+            var input = $(this),
+                options = {},
+                prefix = 'data-mask-',
+                mask = input.attr('data-mask');
+
+            if (input.attr(prefix + 'reverse')) {
+                options.reverse = true;
+            }
+
+            if (input.attr(prefix + 'clearifnotmatch')) {
+                options.clearIfNotMatch = true;
+            }
+
+            if (input.attr(prefix + 'selectonfocus') === 'true') {
+                options.selectOnFocus = true;
+            }
+
+            if (notSameMaskObject(input, mask, options)) {
+                return input.data('mask', new Mask(this, mask, options));
+            }
+        },
+        notSameMaskObject = function(field, mask, options) {
+            options = options || {};
+            var maskObject = $(field).data('mask'),
+                stringify = JSON.stringify,
+                value = $(field).val() || $(field).text();
+            try {
+                if (typeof mask === 'function') {
+                    mask = mask(value);
+                }
+                return typeof maskObject !== 'object' || stringify(maskObject.options) !== stringify(options) || maskObject.mask !== mask;
+            } catch (e) {}
+        },
+        eventSupported = function(eventName) {
+            var el = document.createElement('div'), isSupported;
+
+            eventName = 'on' + eventName;
+            isSupported = (eventName in el);
+
+            if ( !isSupported ) {
+                el.setAttribute(eventName, 'return;');
+                isSupported = typeof el[eventName] === 'function';
+            }
+            el = null;
+
+            return isSupported;
+        };
+
+    $.fn.mask = function(mask, options) {
+        options = options || {};
+        var selector = this.selector,
+            globals = $.jMaskGlobals,
+            interval = globals.watchInterval,
+            watchInputs = options.watchInputs || globals.watchInputs,
+            maskFunction = function() {
+                if (notSameMaskObject(this, mask, options)) {
+                    return $(this).data('mask', new Mask(this, mask, options));
+                }
+            };
+
+        $(this).each(maskFunction);
+
+        if (selector && selector !== '' && watchInputs) {
+            clearInterval($.maskWatchers[selector]);
+            $.maskWatchers[selector] = setInterval(function(){
+                $(document).find(selector).each(maskFunction);
+            }, interval);
+        }
+        return this;
+    };
+
+    $.fn.masked = function(val) {
+        return this.data('mask').getMaskedVal(val);
+    };
+
+    $.fn.unmask = function() {
+        clearInterval($.maskWatchers[this.selector]);
+        delete $.maskWatchers[this.selector];
+        return this.each(function() {
+            var dataMask = $(this).data('mask');
+            if (dataMask) {
+                dataMask.remove().removeData('mask');
+            }
+        });
+    };
+
+    $.fn.cleanVal = function() {
+        return this.data('mask').getCleanVal();
+    };
+
+    $.applyDataMask = function(selector) {
+        selector = selector || $.jMaskGlobals.maskElements;
+        var $selector = (selector instanceof $) ? selector : $(selector);
+        $selector.filter($.jMaskGlobals.dataMaskAttr).each(HTMLAttributes);
+    };
+
+    var globals = {
+        maskElements: 'input,td,span,div',
+        dataMaskAttr: '*[data-mask]',
+        dataMask: true,
+        watchInterval: 300,
+        watchInputs: true,
+        // old versions of chrome dont work great with input event
+        useInput: !/Chrome\/[2-4][0-9]|SamsungBrowser/.test(window.navigator.userAgent) && eventSupported('input'),
+        watchDataMask: false,
+        byPassKeys: [9, 16, 17, 18, 36, 37, 38, 39, 40, 91],
+        translation: {
+            '0': {pattern: /\d/},
+            '9': {pattern: /\d/, optional: true},
+            '#': {pattern: /\d/, recursive: true},
+            'A': {pattern: /[a-zA-Z0-9]/},
+            'S': {pattern: /[a-zA-Z]/}
+        }
+    };
+
+    $.jMaskGlobals = $.jMaskGlobals || {};
+    globals = $.jMaskGlobals = $.extend(true, {}, globals, $.jMaskGlobals);
+
+    // looking for inputs with data-mask attribute
+    if (globals.dataMask) {
+        $.applyDataMask();
+    }
+
+    setInterval(function() {
+        if ($.jMaskGlobals.watchDataMask) {
+            $.applyDataMask();
+        }
+    }, globals.watchInterval);
+}, window.jQuery, window.Zepto));

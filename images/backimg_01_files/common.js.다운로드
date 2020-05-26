@@ -1,0 +1,951 @@
+
+// service.js
+
+try {
+    window.opera || document.execCommand("BackgroundImageCache",false,true);
+} catch(ignored) {}
+
+$(document).ready(function() {
+
+    var $linkTop = $('.link_top'),
+        $window = $(window),
+        $kakaoHead = $('#kakaoHead'),
+        $kakaoFoot = $('#kakaoFoot'),
+        $kakaoWrap =$('#kakaoWrap'),
+        $head_main = $('.head_type3'),
+        $kakaoContent = $('#kakaoContent'),
+        $txtStandard = $('.txt_standard'),
+        $opt_comm = $('.opt_comm'),
+        $wrap_cont = $('.wrap_cont');
+
+
+    $kakaoFoot.attr('aria-hidden', 'false');
+    $kakaoHead.attr('aria-hidden', 'false');
+    $kakaoContent.attr('aria-hidden', 'false');
+
+    $linkTop.removeClass('tab_fix');
+    var isGnbHover = false;
+    var isShowGnb = false;
+
+    var kakaoGnb = {
+        // main menu 마우스오버 할때 sub menu hide/show event
+        toggleMainMenu: function() {
+            $('.list_gnb > li').on('mouseover focusin', function () {
+                // 메인메뉴 포커스 이동할때 마다 전체 서브메뉴 on 클래스 제거
+                var hasClassOn = $(this).is('[class*="on"]');
+                if (!hasClassOn) {
+                    $('.list_gnb > li').removeClass('on')
+                }
+                $(this).addClass('on');
+            }).on('mouseleave', function () {
+                $(this).removeClass('on');
+            })
+        },
+        // 스크롤시에 1단 메뉴 hide/show event
+        toggleOneDepthMenu: function() {
+            var toggleGnb = function (e) {
+                if($('body').css('overflow') == 'hidden') return;
+                if(!(e && $(e.target).is('textarea'))) {
+                    // var top = $window.scrollTop();
+                    var top = getCurrentScroll();
+                    var delta = e ? e.originalEvent.wheelDelta || -e.originalEvent.deltaY || -e.originalEvent.detail : -top;
+
+                    if (delta >= 2 || delta <= -2) {
+                        if (delta < 0 && top > 60) {
+                            if (!isShowGnb) {
+                                isShowGnb = true;
+                                $kakaoHead.addClass('hide-gnb');
+                            }
+                        } else {
+                            if (isShowGnb) {
+                                isShowGnb = false;
+                                $kakaoHead.removeClass('hide-gnb');
+                            }
+                        }
+                    }
+                }
+            };
+
+            $window.on('mousewheel', toggleGnb);
+            toggleGnb();
+        },
+        // 메인 페이지에서 gnb hover event
+
+        toggleMainMenuInMainPage: function() {
+            $kakaoHead.hover(function () {
+                isGnbHover = true;
+                $kakaoHead.removeAttr('style');
+                $kakaoHead.removeClass('head_type1');
+                $kakaoHead.removeClass('head_type3');
+                $kakaoHead.addClass('head_type2');
+            }, function () {
+                isGnbHover = false;
+                if(getCurrentScroll() === 0){
+                // if($window.scrollTop() === 0){
+                    $kakaoHead.removeClass('head_type2');
+                }
+                if(!$kakaoHead.hasClass('head_type2')){
+                    if (type === 'white') {
+                        $kakaoHead.addClass('head_type1');
+                    } else {
+                        $kakaoHead.addClass('head_type3');
+                    }
+                }
+            });
+        },
+        initWithoutMainPage: function() {
+            $kakaoHead.removeAttr('class');
+            $kakaoHead.addClass('head_type2');
+        }
+    };
+    kakaoGnb.toggleMainMenu();
+
+    if(location.pathname === '/') {
+        kakaoGnb.toggleMainMenuInMainPage();
+    } else {
+        kakaoGnb.toggleOneDepthMenu();
+        kakaoGnb.initWithoutMainPage();
+    }
+
+
+    // 검색박스 이벤트
+    if ( document.getElementById( 'search_word' ) != null ) {
+        if ( document.getElementById( 'search_word' ).value.length > 0 ) {
+            document.getElementsByClassName( 'sch_comm' )[0].classList.add( 'sch_on' );
+        } else {
+            document.getElementsByClassName( 'sch_comm' )[0].classList.remove( 'sch_on' );
+        }
+
+        document.getElementById( 'search_word' ).addEventListener( 'focus', function( event ) {
+            document.getElementsByClassName( 'sch_comm' )[0].classList.add( 'sch_on' );
+        } );
+
+        document.getElementById( 'search_word' ).addEventListener( 'blur', function( event ) {
+            if ( document.getElementById( 'search_word' ).value.length <= 0 ) {
+                document.getElementsByClassName( 'sch_comm' )[0].classList.remove( 'sch_on' );
+            }
+        } );
+    }
+
+    //고객지원 카카오서비스 선택시
+    if ( document.getElementById( 'query' ) != null ) {
+        if ( document.getElementById( 'query' ).value.length > 0 ) {
+            document.getElementsByClassName( 'sch_comm' )[0].classList.add( 'sch_on' );
+        } else {
+            document.getElementsByClassName( 'sch_comm' )[0].classList.remove( 'sch_on' );
+        }
+
+        document.getElementById( 'query' ).addEventListener( 'focus', function( event ) {
+            document.getElementsByClassName( 'sch_comm' )[0].classList.add( 'sch_on' );
+        } );
+
+        document.getElementById( 'query' ).addEventListener( 'blur', function( event ) {
+            if ( document.getElementById( 'query' ).value.length <= 0 ) {
+                document.getElementsByClassName( 'sch_comm' )[0].classList.remove( 'sch_on' );
+            }
+        } );
+    }
+
+    // 푸터 관련사이트 셀렉트 박스 이벤트
+    var titRelation = document.getElementsByClassName('tit_relation')[0];
+    if(titRelation.addEventListener) {
+        titRelation.addEventListener('click', function (event) {
+            if (this.parentNode.classList.contains('relation_open')) {
+                this.parentNode.classList.remove('relation_open');
+                this.childNodes[0].setAttribute('aria-expanded', 'false');
+            } else {
+                this.parentNode.classList.add('relation_open');
+                this.childNodes[0].setAttribute('aria-expanded', 'true');
+            }
+        });
+    } else {
+        titRelation.attachEvent('onclick', function (event) {
+            if (this.parentNode.classList.contains('relation_open')) {
+                this.parentNode.classList.remove('relation_open');
+                this.childNodes[0].setAttribute('aria-expanded', 'false');
+            } else {
+                this.parentNode.classList.add('relation_open');
+                this.childNodes[0].setAttribute('aria-expanded', 'true');
+            }
+        });
+    }
+
+    var $linkSelected = $('.link_selected');
+    $linkSelected.on('click', function(e){
+        var $self = $(this);
+        var $ico = $self.find('.ico_corp');
+        var changeClass =  $self.parent().hasClass('opt_comm') ? 'opt_open' : 'data_open'; // KAKAOCORP-472 jake
+        var baseTxt, changeTxt;
+
+        // $linkSelected.parent().removeClass('opt_open'); KAKAOCORP-303 jake
+        $self.parent().toggleClass(changeClass);
+        baseTxt = $self.parent().hasClass(changeClass) ? '펼치기' : '접기';
+        changeTxt = baseTxt == '펼치기' ? '접기' : '펼치기';
+        if( $ico.text() ) {
+            $ico.text($ico.text().replace(baseTxt, changeTxt));
+        } else {
+            $ico.text(changeTxt);
+        }
+
+        $self.parent().find('.link_option').on('click', function() {
+            $(this).off('click')
+            $self.parent().removeClass(changeClass);
+        });
+        $self.on('blur', function(e) {
+            $(this).off('blur')
+            if(!$(e.target).hasClass('link_selected')) {
+                $self.parent().removeClass(changeClass);
+            }
+        });
+    });
+
+
+    // $('.link_selected').on('click', function(e){
+    //     var $self = $(this);
+    //     var $parent = $self.parent();
+    //     var text = '';
+    //     if(!$parent.hasClass('opt_open')){
+    //         $parent.addClass('opt_open')
+    //         text = getPreText($self, '실적보고서', '실적보고서 PT 다운로드');
+    //         $self.find('.ico_corp').text(text + ' 펼치기');
+    //     } else {
+    //         $parent.removeClass('opt_open')
+    //         text = getPreText($self, '실적보고서', '실적보고서 PT 다운로드');
+    //         $self.find('.ico_corp').text(text + ' 접기');
+    //     }
+
+    //     $parent.find('.link_option').on('click', function() {
+    //         $(this).off('click');
+    //         $parent.removeClass('opt_open');
+    //         text = getPreText($self, '실적보고서', '실적보고서 PT 다운로드');
+    //         $self.find('.ico_corp').text(text + ' 접기');
+    //     });
+
+    //     $self.on('blur', function(e) {
+    //         $(this).off('blur');
+    //         $parent.removeClass('opt_open');
+    //         text = getPreText($self, '실적보고서', '실적보고서 PT 다운로드');
+    //         $self.find('.ico_corp').text(text + ' 접기');
+    //     });
+    // });
+
+    // function getPreText($self, checkText, resultText) {
+    //     var text = $self.text();
+    //     return text && (text.indexOf(checkText) !== -1) ? resultText : '';
+    // }
+
+    // 스크롤바 숨김 (네이티브 사용)
+    $('.scroll_bar').hide();
+    $('.inner_opt').mCustomScrollbar({
+        axis: 'y',
+        theme: 'dark-thick',
+        documentTouchScroll: false,
+        autoExpandScrollbar: true
+    });
+
+    $('ul.list_opt').find('li').each(function (idx) {
+        $(this).on('click', function () {
+            $(this).siblings().each(function () {
+                $(this).removeClass('on');
+            });
+            $(this).addClass('on');
+        });
+    });
+
+    // 셀렉박스 제외한 영역 클릭 시 셀렉 박스 닫힘
+    $kakaoWrap.click(function (e) {
+        if($opt_comm.hasClass('opt_open')){
+            if(!$opt_comm.has(e.target).length){
+                $opt_comm.removeClass('opt_open');
+            }
+        }
+    });
+    
+    function getCurrentScroll() {
+        return $window.scrollTop();
+    }
+
+    function setCurrentScroll(value) {
+        $window.scrollTop(value);
+    }
+
+    function focusInput() {
+        $('form').find('input').each(function() {
+            $(this).on('focus', function() {
+                $(this).parent().addClass('tf_on');
+                $('.opt_comm2').removeClass('opt_open')
+            });
+            $(this).on('blur', function() {
+                $(this).parent().removeClass('tf_on');
+                $('.opt_comm2').removeClass('opt_open')
+            });
+        });
+        $('form').find('textarea').each(function() {
+            $(this).on('focus', function() {
+                $(this).parent().addClass('tf_on');
+                $('.opt_comm2').removeClass('opt_open')
+            });
+            $(this).on('blur', function() {
+                $(this).parent().removeClass('tf_on');
+                $('.opt_comm2').removeClass('opt_open')
+            });
+        });
+
+    }
+    focusInput();
+
+    $('.link_sub.on').attr('aria-current','page'); // KAKAOCORP-260
+
+    var type;
+    // 메인페이지 슬라이드
+    if(document.getElementById('mainSlide')) {
+        var bannerImages = [];
+        var bannerLinks = [];
+        var bannerMoreOpts = [];
+        var bannerContents = [];
+        var bannerTypes = [];
+        var bannerButtonClassCode = [];
+
+        $('#bannerData').children().each(function(){
+            //li[name='serviceOpt']
+            bannerImages.push($(this).children('input[name="bannerImage"]').val());
+            bannerLinks.push($(this).children('input[name="bannerLink"]').val());
+            bannerMoreOpts.push($(this).children('input[name="bannerMoreOpts"]').val());
+            bannerContents.push($(this).children('input[name="bannerContent"]').val());
+            bannerTypes.push($(this).children('input[name="bannerType"]').val());
+            bannerButtonClassCode.push($(this).children('input[name="bannerButtonClassCode"]').val());
+        });
+
+        $('#mainSlide').kSlide({
+            "images": bannerImages,
+            "width": "",
+            "height": "100%",
+            "showDuration": 4,
+            "useTransition": true,
+            "useAutoChange": true,
+            "useAnimation3D": true,
+            "minHeight": 602,
+            "maxHeight": 842,
+            "useSnap": (1 < bannerImages.length ? true : false),
+            "type": "fade", //slide, fade
+            "extraData" : {
+                'bannerLinks' : bannerLinks,
+                'bannerMoreOpts': bannerMoreOpts,
+                'bannerContents' : bannerContents,
+                'bannerTypes' : bannerTypes,
+                'bannerButtonClassCode' : bannerButtonClassCode
+            },
+            "changedCallback": function(self, pageNumber) {
+                type = bannerTypes[pageNumber-1];
+                var buttonType = bannerButtonClassCode[pageNumber-1];
+                var $current =  $(self).find('.on').find('.thumb_slide');
+                if(buttonType == 'btn0'){
+                    $current.find('a.btn_with').hide();
+
+                } else if (buttonType == 'btn1'){
+                    $current.find('a.btn_with').show();
+                    $current.find('a.btn_with').addClass('btn_stroke');
+                } else if (buttonType == 'btn2'){
+                    $current.find('a.btn_with').show();
+
+                }
+                if(this.type != "fade"){
+                    if($kakaoHead.hasClass('head_type2')){
+                        $kakaoHead.removeClass('head_type1');
+                        $kakaoHead.removeClass('head_type3');
+                    }else {
+                        if(type == 'white') {
+                            $kakaoHead.removeClass('head_type3');
+                            $kakaoHead.addClass('head_type1');
+                            $current.removeClass('white_slide');
+                        } else {
+                            $kakaoHead.removeClass('head_type1');
+                            $kakaoHead.addClass('head_type3');
+                            $current.addClass('white_slide');
+                        }
+                    }
+                } else {
+                    if(type == 'white' && $kakaoHead.hasClass('head_type3')) {
+                        $kakaoHead.removeClass('head_type3');
+                        $kakaoHead.addClass('head_type1');
+                        $current.removeClass('white_slide');
+                    }
+                }
+
+                $current.find('a.btn_with').click(function (e) {
+                    _tiq.push(['__trackClick', 'main banner more'+pageNumber, this.href]);
+
+                    // new tiara
+                    let eventName = 'main banner more'+pageNumber;
+                    let clickInfo = {
+                        layer1: eventName,
+                        click_url: this.href
+                    };
+
+                    tiaraInstance.trackClickEvent(eventName, clickInfo);
+                });
+
+            }
+        });
+
+    }
+
+    // 같이가치 with Kakao 슬라이드
+    if(document.getElementById('worthSlid')) {
+        $('#worthSlid').kSlide({
+            "images": [
+                '//t1.kakaocdn.net/kakaocorp/pw/socialimpact/feature_together_01_181011.png',
+                '//t1.kakaocdn.net/kakaocorp/pw/socialimpact/feature_together_02_181011.png',
+                '//t1.kakaocdn.net/kakaocorp/pw/socialimpact/feature_together_03_181011.png'
+            ],
+            "width": "100%",
+            "height": 484,
+            "imgWidth": 860,
+            "imgHeight": 484,
+            "showDuration": 5,
+            "useTransition": true,
+            "useAutoChange": true,
+            "useAnimation3D": true,
+            "useSnap": true,
+            "type": "fade" //slide, fade
+        });
+    }
+
+    // 메이커스 with Kakao 소개 슬라이드
+    if(document.getElementById('makersSlid')) {
+        $('#makersSlid').kSlide({
+            "images": [
+                '//t1.kakaocdn.net/kakaocorp/pw/socialimpact/feature_makers_01_181219.png',
+                '//t1.kakaocdn.net/kakaocorp/pw/socialimpact/feature_makers_02_181219.png'
+            ],
+            "width": "100%",
+            "height": 484,
+            "imgWidth": 860,
+            "imgHeight": 484,
+            "showDuration": 5,
+            "useTransition": true,
+            "useAutoChange": true,
+            "useAnimation3D": true,
+            "useSnap": true,
+            "type": "fade" //slide, fade
+        });
+    }
+
+    // 카카오 문화 슬라이드
+    if(document.getElementById('cultureSlide')) {
+        $('#cultureSlide').kSlide({
+            "images": [
+                '//t1.kakaocdn.net/kakaocorp/pw/kakao/intro_culture01.jpg',
+                '//t1.kakaocdn.net/kakaocorp/pw/kakao/intro_culture02.jpg',
+                '//t1.kakaocdn.net/kakaocorp/pw/kakao/intro_culture03.jpg',
+                '//t1.kakaocdn.net/kakaocorp/pw/kakao/intro_culture04.jpg',
+                '//t1.kakaocdn.net/kakaocorp/pw/kakao/intro_culture05.jpg'
+            ],
+            "width": "100%",
+            "height": 494,
+            "showDuration": 6,
+            "useTransition": true,
+            "useAutoChange": true,
+            "useAnimation3D": true,
+            "useSnap": true,
+            "type": "fade" //slide, fade
+        });
+    }
+
+    //트래블데이 판교 슬라이드
+    if(document.getElementById('inPangyoSlide')) {
+        $('#inPangyoSlide').kSlide({
+            "images": [
+                '//t1.kakaocdn.net/kakaocorp/pw/kakao/prom_travelday_pangyo01.jpg',
+                '//t1.kakaocdn.net/kakaocorp/pw/kakao/prom_travelday_pangyo02.jpg',
+                '//t1.kakaocdn.net/kakaocorp/pw/kakao/prom_travelday_pangyo03.jpg'
+            ],
+            "width": "100%",
+            "height": 494,
+            "showDuration": 5,
+            "useTransition": true,
+            "useAutoChange": true,
+            "useAnimation3D": true,
+            "useSnap": true,
+            "type": "fade" //slide, fade
+        });
+    }
+
+    if(document.getElementById('daumSlide1')){
+        $('#daumSlide1').kSlide({
+            "images": [
+                '//t1.kakaocdn.net/kakaocorp/Service/Daum/pc/slide1/daumpc01_01_200212.jpg',
+                '//t1.kakaocdn.net/kakaocorp/Service/Daum/pc/slide1/daumpc01_02_200212.jpg',
+                '//t1.kakaocdn.net/kakaocorp/Service/Daum/pc/slide1/daumpc01_03_200212.jpg'
+            ],
+            "width": "100%",
+            "height": "100%",
+            "showDuration": 5,
+            "useTransition": true,
+            "useAutoChange": true,
+            "useAnimation3D": true,
+            "useSnap": true,
+            "type": "fade" //slide, fade
+        });
+    }
+
+    if(document.getElementById('daumSlide2')){
+        $('#daumSlide2').kSlide({
+            "images": [
+                '//t1.kakaocdn.net/kakaocorp/Service/Daum/pc/slide2/daumpc02_01_200212.jpg',
+                '//t1.kakaocdn.net/kakaocorp/Service/Daum/pc/slide2/daumpc02_02_200212.jpg',
+                '//t1.kakaocdn.net/kakaocorp/Service/Daum/pc/slide2/daumpc02_03_200212.jpg',
+                '//t1.kakaocdn.net/kakaocorp/Service/Daum/pc/slide2/daumpc02_04_200212.jpg',
+                '//t1.kakaocdn.net/kakaocorp/Service/Daum/pc/slide2/daumpc02_05_200212.jpg'
+            ],
+            "width": "100%",
+            "height": "100%",
+            "showDuration": 5,
+            "useTransition": true,
+            "useAutoChange": true,
+            "useAnimation3D": true,
+            "useSnap": true,
+            "type": "fade" //slide, fade
+        });
+    }
+
+    if(document.getElementById('talkSlide1')){
+        $('#talkSlide1').kSlide({
+            "images": [
+                '//t1.kakaocdn.net/kakaocorp/Service/KakaoTalk/svc_kakaotalk2_slide01.png'
+            ],
+            "width": "100%",
+            "height": "100%",
+            "showDuration": 5,
+            "useTransition": true,
+            "useAutoChange": true,
+            "useAnimation3D": true,
+            "type": "fade" //slide, fade
+        });
+    }
+
+    if(document.getElementById('talkSlide2')){
+        $('#talkSlide2').kSlide({
+            "images": [
+                '//t1.kakaocdn.net/kakaocorp/Service/KakaoTalk/svc_kakaotalk6_slide01.png'
+            ],
+            "width": "100%",
+            "height": "100%",
+            "showDuration": 5,
+            "useTransition": true,
+            "useAutoChange": true,
+            "useAnimation3D": true,
+            "type": "fade" //slide, fade
+        });
+    }
+
+    // list_vertical > li on class 제어
+    var $listVertical = $('.list_vertical');
+    if(location.pathname.indexOf('managementInformation') > 0){
+        var $listVertical_li = $('.list_vertical li');
+        var $listVertical_tab = $listVertical_li.find('a[href="'+location.hash+'"]');
+        $listVertical.removeClass('tab_fix');
+        $listVertical_li.removeClass('on');
+        if(!location.hash) {
+            $listVertical_tab = $listVertical_li.find('a[href="#tab1"]');
+        }
+        $listVertical_tab.parent().addClass('on');
+
+        // list_vertical event
+        $listVertical_li.click(function () {
+            $listVertical_li.removeClass('on');
+            $(this).addClass('on');
+        });
+    }
+
+
+    function linkTop() {
+        // var scrollTop = $window.scrollTop();
+        var scrollTop = getCurrentScroll();
+        var $linkTop = $('.link_top');
+        if(scrollTop > 0){
+            $linkTop.removeClass('hide');
+            if($window.width() <= 1320){
+                $linkTop.css("position","absolute"); // make it related
+                $linkTop.css("bottom",($kakaoFoot.height()+60) + 'px'); // 60 px, height of #toTop
+
+            } else {
+                if(scrollTop + $window.height() < $(document).height() - $kakaoFoot.height()) {
+                    $linkTop.css("position","fixed");    //resetting it
+                    $linkTop.css("bottom","60px"); //resetting it
+                }
+                if(scrollTop + $window.height() > $(document).height() - $kakaoFoot.height()) {
+                    $linkTop.css("position","absolute"); // make it related
+                    $linkTop.css("bottom",($kakaoFoot.height()+60) + 'px'); // 60 px, height of #toTop
+                }
+            }
+
+        } else {
+            $linkTop.addClass('hide');
+            $kakaoHead.removeClass('hide-gnb');
+        }
+
+    }
+
+    function irScrollEvent(scrollTop) {
+        $listVertical.addClass('tab_fix');
+        if (location.pathname.indexOf('constitution') > 0 ) {
+            if (scrollTop + $kakaoHead.height() + $kakaoFoot.height()  > $txtStandard.offset().top) {
+                // $listVertical.removeClass('tab_fix');
+                // $listVertical.css({
+                //     'position': 'absolute',
+                //     'bottom': '-20px'
+                // });
+            } else {
+                $listVertical.removeAttr('style');
+            }
+        } else if (location.pathname.indexOf('codeOfBusinessEthics') > 0) {
+            if(scrollTop + $kakaoHead.height() + $kakaoFoot.height() + 180 > $txtStandard.offset().top){
+                $listVertical.removeClass('tab_fix');
+                $listVertical.css({
+                    'position': 'absolute',
+                    'bottom': '-20px'
+                });
+            } else {
+                $listVertical.removeAttr('style');
+            }
+        }
+    }
+
+    function kakaoTalkScrollEvent(scrollTop) {
+        if(scrollTop + kakaoHeadHeight > $wrap_cont.offset().top - 60){
+            $listVertical.addClass('tab_fix');
+            $listVertical.removeAttr('style');
+            if(scrollTop + $kakaoFoot.height() - kakaoHeadHeight > $('#mArticle').outerHeight()){
+                $listVertical.removeClass('tab_fix');
+                $listVertical.css({
+                    'position': 'absolute',
+                    'bottom': '-16px'
+                });
+            } else {
+                $listVertical.removeAttr('style');
+                $listVertical.addClass('tab_fix');
+                if(!$kakaoHead.hasClass('hide-gnb')){
+                    $listVertical.css({
+                        top: 176
+                    });
+                }
+            }
+        } else {
+            $listVertical.removeClass('tab_fix');
+        }
+
+        $listVertical.find('li').removeClass('on');
+        if(scrollTop + kakaoHeadHeight < $('#tab2-1').offset().top){
+            $listVertical.find('a#link1').parent().addClass('on');
+        } else if (scrollTop + kakaoHeadHeight < $('#tab3').offset().top){
+            $listVertical.find('a#link2').parent().addClass('on');
+        } else if (scrollTop + kakaoHeadHeight < $('#tab4-1').offset().top){
+            $listVertical.find('a#link3').parent().addClass('on');
+        } else {
+            $listVertical.find('a#link4').parent().addClass('on');
+        }
+
+    }
+    var $pagePath = $('.box_info');
+    var pagePathTop = $pagePath.offset() ? $pagePath.offset().top : 0;
+    var kakaoHeadHeight = $kakaoHead.hasClass('hide-gnb') ? 60 : 121;
+
+    $window.scroll(function (e) {
+        var scrollTop = getCurrentScroll();
+        kakaoHeadHeight = $kakaoHead.hasClass('hide-gnb') ? 60 : 121;
+
+        if (location.pathname === '/'){ // main
+            if (scrollTop == 0 && isGnbHover){
+                $kakaoHead.removeClass().addClass('head_type2');
+            }
+            else if (scrollTop > 0) { // main
+                $head_main.stop().animate({}, 500, function () {
+                    $head_main.css({
+                        'background-color': '#fff',
+                        'transition': 'background-color 500ms'
+                    });
+                });
+                setTimeout(function () {
+                    $kakaoHead.removeAttr('style');
+                    $kakaoHead.css('top', '0px');
+                }, 1000);
+                $kakaoHead.removeAttr('class');
+                $kakaoHead.addClass('head_type2');
+
+            } else {
+                if(type === 'white') {
+                    $kakaoHead.removeClass('head_type2');
+                    $kakaoHead.addClass('head_type1');
+                } else {
+                    $kakaoHead.removeClass('head_type2');
+                    $kakaoHead.addClass('head_type3');
+                }
+                if(!isGnbHover){
+                    $head_main.stop().animate({}, 500, function () {
+                        $head_main.css({
+                            'background-color': 'transparent',
+                            'transition': 'background-color 500ms'
+                        });
+                        setTimeout(function () {
+                            $kakaoHead.removeAttr('style');
+                            $kakaoHead.css('top', '0px');
+                        }, 1000);
+                    });
+                }
+
+            }
+        } else if (location.pathname.indexOf('codeOfBusinessEthics') > 0 || location.pathname.indexOf('constitution') > 0){ // not main
+            if($kakaoHead.hasClass('hide-gnb')){
+                $opt_comm.addClass('opt_fix');
+                if(pagePathTop <= scrollTop){
+                    $opt_comm.removeAttr('style');
+                } else if(scrollTop == 0){
+                    $opt_comm.removeClass('opt_fix');
+                    $opt_comm.removeAttr('style');
+                }
+            } else {
+                if(scrollTop == 0){
+                    $opt_comm.removeClass('opt_fix');
+                    $opt_comm.removeAttr('style');
+                } else {
+                    if(!$opt_comm.hasClass('opt_fix'))
+                        return;
+                    if(pagePathTop <= scrollTop) {
+                        $opt_comm.css({top: 196});
+                    }
+                }
+            }
+        } else if (location.pathname.indexOf('KakaoTalk') > 0) {
+            if(scrollTop + kakaoHeadHeight > $wrap_cont.offset().top){
+                kakaoTalkScrollEvent(scrollTop + 4);
+            } else {
+                $listVertical.removeClass('tab_fix');
+                $listVertical.removeAttr('style');
+            }
+        } else if (location.pathname.indexOf('learnKakaoAccount') > 0 ||
+            location.pathname.indexOf('socialImpact') > 0) {
+            if(location.hash != '' && scrollTop > kakaoHeadHeight){
+                if(!isShowGnb){
+                    $kakaoHead.removeClass('hide-gnb');
+                } else {
+                    $kakaoHead.addClass('hide-gnb');
+                }
+            }
+        } else if (location.pathname.indexOf('service') > 0){
+            if(location.hash == '' && scrollTop > kakaoHeadHeight){
+                $kakaoHead.addClass('hide-gnb');
+            }
+        }
+        linkTop();
+    });
+
+    $window.resize(function(){
+        linkTop();
+    });
+
+    var preTabHash;
+    window.onhashchange = function (e) {
+        preTabHash = location.hash;
+        if(location.hash.indexOf('tab') > 0){
+            var currentTop = getCurrentScroll();
+            if(!$kakaoHead.hasClass('hide-gnb')){
+                if(preTabHash.indexOf('index') < 0){
+                    setCurrentScroll(currentTop - 121);
+                } else {
+                    setCurrentScroll(currentTop);
+                }
+            } else {
+                if(preTabHash.indexOf('index') < 0){
+                    setCurrentScroll(currentTop - 60);
+                } else {
+                    setCurrentScroll(currentTop);
+                }
+            }
+            if (location.pathname.indexOf('ir/') > 0) {
+                $('.list_opt').find('a').each(function () {
+                    if(this.hash == location.hash) {
+                        $kakaoHead.addClass('hide-gnb');
+                        $('#selectedTab').text($(this).text());
+                        $('.box_opt').css({top: $('.opt_comm > a').height()+'px'});
+                        if(this.hash == '#tab1'){
+                            setCurrentScroll(currentTop-121);
+                        } else {
+                            if(preTabHash.indexOf('index') < 0){
+                                setCurrentScroll(currentTop-60);
+                            } else {
+                                setCurrentScroll(currentTop);
+                            }
+                        }
+                    }
+                });
+            }
+            if (location.pathname.indexOf('kakao/') > 0) {
+                $('.list_opt').find('a').each(function () {
+                    if(this.hash == location.hash) {
+                        $kakaoHead.addClass('hide-gnb');
+                        $('#selectedTab').text($(this).text());
+                        $('.box_opt').css({top: $('.opt_comm > a').height()+'px'});
+                        if(this.hash == '#tab1'){
+                            setCurrentScroll(currentTop-121);
+                        } else {
+                            if(preTabHash.indexOf('index') < 0){
+                                setCurrentScroll(currentTop-60);
+                            } else {
+                                setCurrentScroll(currentTop);
+                            }
+                        }
+                    }
+                });
+            }
+        } else if (location.pathname.indexOf('learnKakaoAccount') > 0){
+            var currentTop = getCurrentScroll();
+            isShowGnb = true;
+            if(location.hash.indexOf('kakaoAccount') > 0 && location.hash.indexOf('hash') < 0){
+                setCurrentScroll(currentTop - 15);
+            } else {
+                setCurrentScroll(currentTop - 25);
+            }
+        } else if (location.pathname.indexOf('socialImpact') > 0){
+            isShowGnb = true;
+            var currentTop = getCurrentScroll();
+            if(location.hash.indexOf('hash') < 0){
+                setCurrentScroll(currentTop - 30);
+            }
+        }
+    }
+
+    window.onload = function (e) {
+        preTabHash = location.hash;
+        if(location.hash.indexOf('tab') > 0){
+            var currentTop = getCurrentScroll();
+            if(!$kakaoHead.hasClass('hide-gnb')){
+                if(preTabHash.indexOf('index') < 0){
+                    setCurrentScroll(currentTop - 121);
+                } else {
+                    setCurrentScroll(currentTop);
+                }
+            } else {
+                if(preTabHash.indexOf('index') < 0){
+                    setCurrentScroll(currentTop - 60);
+                } else {
+                    setCurrentScroll(currentTop);
+                }
+            }
+            if (location.pathname.indexOf('ir/') > 0) {
+                $('.list_opt').find('a').each(function () {
+                    if(this.hash == location.hash) {
+                        $kakaoHead.addClass('hide-gnb');
+                        $('#selectedTab').text($(this).text());
+                        $('.box_opt').css({top: $('.opt_comm > a').height()+'px'});
+                        if(this.hash == '#tab1'){
+                            setCurrentScroll(currentTop-121);
+                        } else {
+                            if(preTabHash.indexOf('index') < 0){
+                                setCurrentScroll(currentTop-60);
+                            } else {
+                                setCurrentScroll(currentTop);
+                            }
+                        }
+                    }
+                });
+            }
+            if (location.pathname.indexOf('kakao/') > 0) {
+                $('.list_opt').find('a').each(function () {
+                    if(this.hash == location.hash) {
+                        $kakaoHead.addClass('hide-gnb');
+                        $('#selectedTab').text($(this).text());
+                        $('.box_opt').css({top: $('.opt_comm > a').height()+'px'});
+                        if(this.hash == '#tab1'){
+                            setCurrentScroll(currentTop-121);
+                        } else {
+                            if(preTabHash.indexOf('index') < 0){
+                                setCurrentScroll(currentTop-60);
+                            } else {
+                                setCurrentScroll(currentTop);
+                            }
+                        }
+                    }
+                });
+            }
+        } else if (location.pathname.indexOf('learnKakaoAccount') > 0){
+            var currentTop = getCurrentScroll();
+            isShowGnb = true;
+            if(location.hash.indexOf('kakaoAccount') > 0 && location.hash.indexOf('hash') < 0){
+                setCurrentScroll(currentTop - 15);
+            } else {
+                setCurrentScroll(currentTop - 25);
+            }
+        } else if (location.pathname.indexOf('socialImpact') > 0){
+            isShowGnb = true;
+            var currentTop = getCurrentScroll();
+            if(location.hash.indexOf('hash') < 0){
+                setCurrentScroll(currentTop - 30);
+            }
+        }
+    }
+});
+
+
+
+// global utils
+// 투자정보 > 주가정보 Ajax 처리 위한 분기 _eva
+function moveByPageNum(targetPage,targetGroup) {
+    if(location.pathname == '/ir/stockInformation'){
+
+        moveStockPageNum(targetPage,targetGroup);
+
+    } else {
+        var obj;
+        obj = document.getElementById("searchForm");
+        obj.currentPage.value = targetPage;
+        obj.currentGroup.value = targetGroup;
+        obj.method = "POST";
+        obj.action = location.pathname;
+        obj.submit();
+    }
+}
+
+// 투자정보 > 주가정보 페이징 Ajax 처리 추가_eva
+function moveStockPageNum(targetPage,targetGroup) {
+    var obj;
+    obj = document.getElementById("searchForm");
+    obj.currentPage.value = targetPage;
+    obj.currentGroup.value = targetGroup;
+    obj.movePageFg.value = "Y";
+    obj.method = "POST";
+    obj.action = "/ir/stockInformation";
+    obj.submit();
+}
+
+var commonPopWin = null;
+function popCwin( url, name, w, h, scroll) {
+    var wl = (window.screen.width/2) - ((w/2) + 10);
+    var wt = (window.screen.height/2) - ((h/2) + 50);
+    var option = "height="+h+",width="+w+",left="+wl+",top="+wt+",screenX="+wl+",screenY="+wt+",scrollbars="+scroll + ", status=yes";
+    if (!commonPopWin || (commonPopWin && commonPopWin.closed)) {
+        commonPopWin = window.open(url, name, option);
+    }
+}
+
+
+
+// 정규식을 활용한 기본적인 validator
+var CommonValidator = function() {
+    this.isDigit = function(val) {
+        var regex = /^[0-9]*$/;
+        return null != val && '' != val && regex.test(val);
+    };
+    this.isTelephone = function(val) {
+        var regex = /^(0(2|3[1-3]|4[1-4]|5[1-5]|6[1-4]))-(\d{3,4})-(\d{4})$/;
+        return null != val && '' != val && regex.test(val);
+    };
+    this.isMobile = function(val) {
+        var regex = /^(?:(010-\d{3,4})|(01[1|6|7|8|9]-\d{3,4}))-(\d{4})$/;
+        return null != val && '' != val && regex.test(val);
+    };
+    this.isEmail = function(val) {
+        var regex = /^([\w-]+(?:\.[\w-]+)*)@((?:[\w-]+\.)*\w[\w-]{0,66})\.([a-z]{2,6}(?:\.[a-z]{2})?)$/;
+        return null != val && '' != val && regex.test(val);
+    };
+};
